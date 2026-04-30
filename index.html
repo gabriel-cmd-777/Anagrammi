@@ -116,6 +116,14 @@
   }
   button.ghost:hover { background: var(--ink); color: var(--paper); }
 
+  button.accent {
+    background: var(--accent);
+    color: var(--paper);
+    padding: 8px 14px;
+    font-size: 0.65rem;
+  }
+  button.accent:hover { background: var(--ink); }
+
   .stats {
     display: flex;
     gap: 32px;
@@ -221,6 +229,17 @@
     font-style: italic;
   }
 
+  .letter.space {
+    background: transparent;
+    border-style: dashed;
+    border-color: var(--muted);
+  }
+
+  .letter.selected {
+    box-shadow: 0 0 0 2px var(--accent);
+    border-color: var(--accent);
+  }
+
   .letter:hover {
     transform: translateY(-2px);
     box-shadow: 2px 3px 0 var(--rule);
@@ -256,6 +275,19 @@
     flex-shrink: 0;
   }
 
+  .caret {
+    width: 2px;
+    height: 52px;
+    background: var(--accent);
+    align-self: center;
+    animation: blink 1s step-end infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
   @keyframes pulse {
     from { opacity: 0.5; }
     to { opacity: 1; }
@@ -284,6 +316,21 @@
     flex-wrap: wrap;
   }
 
+  .controls-section {
+    margin-top: 28px;
+    padding-top: 18px;
+    border-top: 1px solid var(--rule);
+  }
+
+  .controls-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
   .legend {
     display: flex;
     gap: 18px;
@@ -306,6 +353,7 @@
   }
   .legend-swatch.v { background: var(--vowel); }
   .legend-swatch.c { background: var(--ink); }
+  .legend-swatch.s { background: transparent; border-style: dashed; }
 
   .ornament {
     text-align: center;
@@ -313,6 +361,28 @@
     color: var(--muted);
     font-size: 1.2rem;
   }
+
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(120%);
+    background: var(--ink);
+    color: var(--paper);
+    padding: 12px 22px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    z-index: 2000;
+    transition: transform 0.3s ease-out;
+    max-width: 90vw;
+  }
+
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.error { background: var(--accent); }
+
+  input[type="file"] { display: none; }
 </style>
 </head>
 <body>
@@ -355,30 +425,49 @@
   </div>
 
   <div class="controls">
+    <button class="ghost" id="spaceBtn">+ spazio</button>
     <button class="ghost" id="shuffleBtn">mescola</button>
     <button class="ghost" id="returnAllBtn">riporta tutto</button>
     <button class="ghost" id="clearBtn">azzera tutto</button>
   </div>
 
+  <div class="controls-section">
+    <div class="controls-label">archivio</div>
+    <div class="controls">
+      <button class="accent" id="saveBtn">salva</button>
+      <button class="ghost" id="loadBtn">carica salvato</button>
+      <button class="ghost" id="exportBtn">esporta json</button>
+      <button class="ghost" id="importBtn">importa json</button>
+      <input type="file" id="fileInput" accept=".json,application/json">
+    </div>
+  </div>
+
   <div class="legend">
     <div class="legend-item"><span class="legend-swatch v"></span>vocali · a e i o u y</div>
     <div class="legend-item"><span class="legend-swatch c"></span>consonanti</div>
-    <div class="legend-item">tap = sposta · trascina = riordina</div>
+    <div class="legend-item"><span class="legend-swatch s"></span>spazio</div>
+    <div class="legend-item">tap = sposta · trascina = riordina · tap su lettera = posiziona caret</div>
   </div>
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
 const VOWELS = new Set(['A','E','I','O','U','Y','À','È','É','Ì','Í','Ò','Ó','Ù','Ú']);
+const SPACE_CHAR = '␣'; // marker interno: rappresenta uno spazio
+const STORAGE_KEY = 'anagrammi_state_v1';
 
 const state = {
   pool: [],
   work: [],
+  caretIdx: 0, // posizione del caret nel box "work" (0 = prima di tutto)
 };
 
 let nextId = 0;
 
 const $ = (id) => document.getElementById(id);
 const isVowel = (c) => VOWELS.has(c.toUpperCase());
+const isSpace = (letter) => letter.char === SPACE_CHAR;
 
 function normalize(input) {
   return Array.from(input.toUpperCase()).filter(c => /\p{L}/u.test(c));
@@ -389,11 +478,22 @@ function addWords(text) {
   chars.forEach(c => {
     state.pool.push({ id: ++nextId, char: c, fresh: true });
   });
+  saveToStorage();
   render();
   setTimeout(() => {
     state.pool.forEach(l => l.fresh = false);
     state.work.forEach(l => l.fresh = false);
   }, 300);
+}
+
+function addSpaceAtCaret() {
+  const spaceLetter = { id: ++nextId, char: SPACE_CHAR, fresh: true };
+  const idx = Math.max(0, Math.min(state.caretIdx, state.work.length));
+  state.work.splice(idx, 0, spaceLetter);
+  state.caretIdx = idx + 1;
+  saveToStorage();
+  render();
+  setTimeout(() => { spaceLetter.fresh = false; }, 250);
 }
 
 function findLetter(letterId) {
@@ -420,6 +520,13 @@ function moveLetterToPosition(letterId, targetBoxId, targetIdx) {
   state[targetBoxId].splice(finalIdx, 0, letter);
 
   letter.fresh = (fromBox !== targetBoxId);
+
+  // aggiorna caret: se la lettera è nel work box, mettiamolo dopo
+  if (targetBoxId === 'work') {
+    state.caretIdx = finalIdx + 1;
+  }
+
+  saveToStorage();
   render();
   setTimeout(() => { letter.fresh = false; }, 250);
 }
@@ -427,8 +534,16 @@ function moveLetterToPosition(letterId, targetBoxId, targetIdx) {
 function moveLetterTap(letterId) {
   const found = findLetter(letterId);
   if (!found) return;
-  const target = found.boxId === 'pool' ? 'work' : 'pool';
-  moveLetterToPosition(letterId, target, state[target].length);
+  if (found.boxId === 'work') {
+    // tap su una lettera già in work → posiziona caret dopo di essa
+    state.caretIdx = found.idx + 1;
+    saveToStorage();
+    render();
+    return;
+  }
+  // tap su lettera in pool → spostala in work, alla posizione del caret
+  const insertAt = Math.max(0, Math.min(state.caretIdx, state.work.length));
+  moveLetterToPosition(letterId, 'work', insertAt);
 }
 
 function render() {
@@ -443,6 +558,12 @@ function renderBox(boxId) {
   const arr = state[boxId];
 
   if (arr.length === 0) {
+    if (boxId === 'work') {
+      // mostra il caret anche se vuoto
+      const caret = document.createElement('div');
+      caret.className = 'caret';
+      container.appendChild(caret);
+    }
     const hint = document.createElement('div');
     hint.className = 'empty-hint';
     hint.textContent = boxId === 'pool'
@@ -452,19 +573,37 @@ function renderBox(boxId) {
     return;
   }
 
+  // se è il work box e il caret è all'inizio (0), inserisci caret prima
+  if (boxId === 'work' && state.caretIdx === 0) {
+    const caret = document.createElement('div');
+    caret.className = 'caret';
+    container.appendChild(caret);
+  }
+
   arr.forEach((letter, idx) => {
     const el = document.createElement('div');
-    el.className = 'letter' + (isVowel(letter.char) ? ' vowel' : '') + (letter.fresh ? ' entering' : '');
-    el.textContent = letter.char;
+    let classes = 'letter';
+    if (isSpace(letter)) classes += ' space';
+    else if (isVowel(letter.char)) classes += ' vowel';
+    if (letter.fresh) classes += ' entering';
+    el.className = classes;
+    el.textContent = isSpace(letter) ? '' : letter.char;
     el.dataset.letterId = letter.id;
     el.dataset.boxId = boxId;
     el.dataset.index = idx;
     container.appendChild(el);
+
+    // caret dopo questa lettera nel work box
+    if (boxId === 'work' && state.caretIdx === idx + 1) {
+      const caret = document.createElement('div');
+      caret.className = 'caret';
+      container.appendChild(caret);
+    }
   });
 }
 
 function updateStats() {
-  const all = [...state.pool, ...state.work];
+  const all = [...state.pool, ...state.work].filter(l => !isSpace(l));
   const total = all.length;
   const vowels = all.filter(l => isVowel(l.char)).length;
   const consonants = total - vowels;
@@ -472,11 +611,11 @@ function updateStats() {
   $('totalCount').textContent = total;
   $('vowelCount').textContent = vowels;
   $('consonantCount').textContent = consonants;
-  $('poolCount').textContent = state.pool.length;
-  $('workCount').textContent = state.work.length;
+  $('poolCount').textContent = state.pool.filter(l => !isSpace(l)).length;
+  $('workCount').textContent = state.work.filter(l => !isSpace(l)).length;
 }
 
-// ============ DRAG SYSTEM con Pointer Events ============
+// ============ DRAG SYSTEM ============
 
 let drag = null;
 const DRAG_THRESHOLD = 5;
@@ -555,29 +694,19 @@ function showDropIndicator(elBelow, x, y) {
   if (result.insertBeforeEl) {
     lettersContainer.insertBefore(indicator, result.insertBeforeEl);
   } else {
-    const hint = lettersContainer.querySelector('.empty-hint');
-    if (hint) {
-      hint.style.display = 'none';
-    }
     lettersContainer.appendChild(indicator);
   }
 }
 
 function computeDropPosition(lettersContainer, x, y) {
-  // ritorna { domIdx, insertBeforeEl } dove domIdx è la posizione tra le lettere visibili
-  // (escludendo placeholder)
   const letters = Array.from(lettersContainer.querySelectorAll('.letter:not(.placeholder)'));
 
   for (let i = 0; i < letters.length; i++) {
     const l = letters[i];
     const r = l.getBoundingClientRect();
     const midX = r.left + r.width / 2;
-    if (y < r.top) {
-      return { domIdx: i, insertBeforeEl: l };
-    }
-    if (y >= r.top && y <= r.bottom && x < midX) {
-      return { domIdx: i, insertBeforeEl: l };
-    }
+    if (y < r.top) return { domIdx: i, insertBeforeEl: l };
+    if (y >= r.top && y <= r.bottom && x < midX) return { domIdx: i, insertBeforeEl: l };
   }
   return { domIdx: letters.length, insertBeforeEl: null };
 }
@@ -603,20 +732,11 @@ function onPointerUp(e) {
     const lettersContainer = box.querySelector('.letters');
     const { domIdx } = computeDropPosition(lettersContainer, e.clientX, e.clientY);
 
-    // domIdx conta le lettere DOM escludendo la placeholder.
-    // Se la lettera trascinata è nello stesso box, dobbiamo convertire al corrispondente
-    // indice nello stato (che include la lettera trascinata).
     const found = findLetter(drag.letterId);
     if (found) {
       let stateIdx = domIdx;
       if (found.boxId === targetBoxId) {
-        // se domIdx è >= found.idx, l'indice di stato corrispondente è domIdx + 1
-        // (perché la placeholder occupa found.idx nello stato ma è esclusa dal DOM count)
-        if (domIdx >= found.idx) {
-          stateIdx = domIdx + 1;
-        } else {
-          stateIdx = domIdx;
-        }
+        stateIdx = domIdx >= found.idx ? domIdx + 1 : domIdx;
       }
       moveLetterToPosition(drag.letterId, targetBoxId, stateIdx);
     }
@@ -625,7 +745,7 @@ function onPointerUp(e) {
   cleanupDrag();
 }
 
-function onPointerCancel(e) {
+function onPointerCancel() {
   if (!drag) return;
   cleanupDrag();
 }
@@ -645,7 +765,106 @@ document.addEventListener('pointermove', onPointerMove);
 document.addEventListener('pointerup', onPointerUp);
 document.addEventListener('pointercancel', onPointerCancel);
 
-// pulsanti
+// ============ STORAGE / IMPORT / EXPORT ============
+
+function serializeState() {
+  return {
+    version: 1,
+    nextId,
+    pool: state.pool.map(l => ({ id: l.id, char: l.char })),
+    work: state.work.map(l => ({ id: l.id, char: l.char })),
+    caretIdx: state.caretIdx,
+    savedAt: new Date().toISOString(),
+  };
+}
+
+function deserializeState(data) {
+  if (!data || typeof data !== 'object') throw new Error('formato non valido');
+  if (!Array.isArray(data.pool) || !Array.isArray(data.work)) throw new Error('formato non valido');
+
+  state.pool = data.pool.map(l => ({ id: l.id, char: l.char, fresh: false }));
+  state.work = data.work.map(l => ({ id: l.id, char: l.char, fresh: false }));
+  state.caretIdx = typeof data.caretIdx === 'number' ? data.caretIdx : state.work.length;
+  nextId = typeof data.nextId === 'number'
+    ? data.nextId
+    : Math.max(0, ...state.pool.map(l => l.id), ...state.work.map(l => l.id));
+}
+
+function saveToStorage() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
+  } catch (e) {
+    // localStorage potrebbe essere disabilitato; ignoriamo silenziosamente
+  }
+}
+
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    deserializeState(JSON.parse(raw));
+    render();
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+let toastTimer = null;
+function showToast(msg, isError = false) {
+  const t = $('toast');
+  if (toastTimer) {
+    clearTimeout(toastTimer);
+    toastTimer = null;
+  }
+  t.textContent = msg;
+  t.classList.remove('error');
+  if (isError) t.classList.add('error');
+  // forza un reflow così la transizione riparte se mostriamo due toast di fila
+  void t.offsetWidth;
+  t.classList.add('show');
+  toastTimer = setTimeout(() => {
+    t.classList.remove('show');
+    toastTimer = null;
+  }, 2200);
+}
+
+function exportJson() {
+  const data = serializeState();
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `anagrammi-${ts}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('esportato');
+}
+
+function importJson(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      deserializeState(data);
+      saveToStorage();
+      render();
+      const total = state.pool.length + state.work.length;
+      showToast(`importato · ${total} lettere`);
+    } catch (err) {
+      showToast('file non valido', true);
+    }
+  };
+  reader.onerror = () => showToast('errore lettura file', true);
+  reader.readAsText(file);
+}
+
+// ============ EVENT BINDINGS ============
+
 $('addBtn').addEventListener('click', () => {
   const v = $('wordInput').value.trim();
   if (!v) return;
@@ -658,26 +877,89 @@ $('wordInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') $('addBtn').click();
 });
 
+$('spaceBtn').addEventListener('click', () => {
+  addSpaceAtCaret();
+});
+
 $('shuffleBtn').addEventListener('click', () => {
   for (let i = state.pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [state.pool[i], state.pool[j]] = [state.pool[j], state.pool[i]];
   }
+  saveToStorage();
   render();
 });
 
 $('returnAllBtn').addEventListener('click', () => {
-  state.pool.push(...state.work);
+  // gli spazi spariscono quando torniamo tutto al pool (non hanno senso lì)
+  const nonSpaces = state.work.filter(l => !isSpace(l));
+  state.pool.push(...nonSpaces);
   state.work = [];
+  state.caretIdx = 0;
+  saveToStorage();
   render();
 });
 
+let clearBtnPendingConfirm = false;
+let clearBtnConfirmTimer = null;
 $('clearBtn').addEventListener('click', () => {
+  if (!clearBtnPendingConfirm) {
+    clearBtnPendingConfirm = true;
+    const btn = $('clearBtn');
+    const originalText = btn.textContent;
+    btn.textContent = 'sicuro? tocca di nuovo';
+    btn.style.background = 'var(--accent)';
+    btn.style.color = 'var(--paper)';
+    btn.style.borderColor = 'var(--accent)';
+    clearBtnConfirmTimer = setTimeout(() => {
+      clearBtnPendingConfirm = false;
+      btn.textContent = originalText;
+      btn.style.background = '';
+      btn.style.color = '';
+      btn.style.borderColor = '';
+    }, 3000);
+    return;
+  }
+  // secondo click: conferma
+  clearTimeout(clearBtnConfirmTimer);
+  clearBtnPendingConfirm = false;
+  const btn = $('clearBtn');
+  btn.textContent = 'azzera tutto';
+  btn.style.background = '';
+  btn.style.color = '';
+  btn.style.borderColor = '';
   state.pool = [];
   state.work = [];
+  state.caretIdx = 0;
+  nextId = 0;
+  $('wordInput').value = '';
+  try { localStorage.removeItem(STORAGE_KEY); } catch(_) {}
   render();
+  showToast('azzerato');
 });
 
+$('saveBtn').addEventListener('click', () => {
+  saveToStorage();
+  showToast('salvato');
+});
+
+$('loadBtn').addEventListener('click', () => {
+  if (loadFromStorage()) showToast('caricato');
+  else showToast('nessun salvataggio', true);
+});
+
+$('exportBtn').addEventListener('click', exportJson);
+
+$('importBtn').addEventListener('click', () => $('fileInput').click());
+
+$('fileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) importJson(file);
+  e.target.value = ''; // reset così si può reimportare lo stesso file
+});
+
+// caricamento iniziale dallo storage
+loadFromStorage();
 render();
 </script>
 </body>
