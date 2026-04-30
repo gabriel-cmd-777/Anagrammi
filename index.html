@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anagrammi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1a1814;
+    --paper: #f4f0e8;
+    --paper-darker: #ebe5d8;
+    --rule: #2a2620;
+    --accent: #8b2e1f;
+    --vowel: #8b2e1f;
+    --muted: #6b6358;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Cormorant Garamond', serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: contain;
+  }
+
+  body {
+    background-image:
+      repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(26,24,20,0.015) 2px,
+        rgba(26,24,20,0.015) 3px
+      );
+    padding: 32px 20px 80px;
+  }
+
+  .container { max-width: 920px; margin: 0 auto; }
+
+  header {
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 18px;
+    margin-bottom: 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  h1 {
+    font-weight: 500;
+    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    letter-spacing: -0.02em;
+    font-style: italic;
+  }
+
+  .subtitle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+  }
+
+  .input-section { margin-bottom: 36px; }
+
+  .input-row {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  input[type="text"] {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--rule);
+    padding: 14px 4px;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.4rem;
+    color: var(--ink);
+    outline: none;
+    font-style: italic;
+  }
+
+  input[type="text"]:focus { border-bottom-color: var(--accent); }
+  input[type="text"]::placeholder { color: var(--muted); font-style: italic; }
+
+  button {
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    padding: 0 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  button:hover { background: var(--accent); }
+  button.ghost {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    padding: 8px 14px;
+    font-size: 0.65rem;
+  }
+  button.ghost:hover { background: var(--ink); color: var(--paper); }
+
+  .stats {
+    display: flex;
+    gap: 32px;
+    margin-top: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    flex-wrap: wrap;
+  }
+
+  .stat span {
+    color: var(--ink);
+    font-weight: 500;
+    font-size: 0.95rem;
+    margin-left: 6px;
+  }
+
+  .stat .vowel-count { color: var(--vowel); }
+
+  .boxes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  @media (max-width: 680px) {
+    .boxes { grid-template-columns: 1fr; }
+  }
+
+  .box {
+    border: 1px solid var(--rule);
+    padding: 22px 20px;
+    min-height: 280px;
+    background: var(--paper);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    transition: background 0.15s, box-shadow 0.15s;
+  }
+
+  .box.drag-over {
+    background: var(--paper-darker);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+
+  .box-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 10px;
+    margin-bottom: 18px;
+  }
+
+  .box-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+  }
+
+  .box-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+
+  .letters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-content: flex-start;
+    flex: 1;
+    min-height: 200px;
+    position: relative;
+  }
+
+  .letter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 52px;
+    background: var(--paper-darker);
+    border: 1px solid var(--rule);
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.6rem;
+    font-weight: 500;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: none;
+    transition: transform 0.12s, box-shadow 0.12s;
+    position: relative;
+  }
+
+  .letter.vowel {
+    color: var(--vowel);
+    font-style: italic;
+  }
+
+  .letter:hover {
+    transform: translateY(-2px);
+    box-shadow: 2px 3px 0 var(--rule);
+  }
+
+  .letter.dragging {
+    position: fixed;
+    z-index: 1000;
+    pointer-events: none;
+    cursor: grabbing;
+    box-shadow: 4px 6px 0 var(--rule);
+    transform: rotate(-3deg) scale(1.08);
+    background: var(--paper);
+    border-color: var(--accent);
+    margin: 0 !important;
+  }
+
+  .letter.placeholder {
+    opacity: 0.25;
+  }
+
+  .letter.entering {
+    animation: pop 0.25s ease-out;
+  }
+
+  .drop-indicator {
+    width: 3px;
+    height: 52px;
+    background: var(--accent);
+    border-radius: 2px;
+    align-self: center;
+    animation: pulse 0.6s ease-in-out infinite alternate;
+    flex-shrink: 0;
+  }
+
+  @keyframes pulse {
+    from { opacity: 0.5; }
+    to { opacity: 1; }
+  }
+
+  @keyframes pop {
+    0% { transform: scale(0.5); opacity: 0; }
+    50% { transform: scale(1.15); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .empty-hint {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    color: var(--muted);
+    font-size: 1rem;
+    align-self: center;
+    margin: auto;
+    text-align: center;
+  }
+
+  .controls {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+
+  .legend {
+    display: flex;
+    gap: 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+    flex-wrap: wrap;
+  }
+
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+  .legend-swatch {
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--rule);
+  }
+  .legend-swatch.v { background: var(--vowel); }
+  .legend-swatch.c { background: var(--ink); }
+
+  .ornament {
+    text-align: center;
+    margin: 14px 0;
+    color: var(--muted);
+    font-size: 1.2rem;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Anagrammi</h1>
+    <div class="subtitle">officina · lettere &amp; vocali</div>
+  </header>
+
+  <section class="input-section">
+    <div class="input-row">
+      <input type="text" id="wordInput" placeholder="inserisci una o più parole…" autocomplete="off" spellcheck="false">
+      <button id="addBtn">aggiungi</button>
+    </div>
+    <div class="stats" id="stats">
+      <div class="stat">totale<span id="totalCount">0</span></div>
+      <div class="stat">vocali<span class="vowel-count" id="vowelCount">0</span></div>
+      <div class="stat">consonanti<span id="consonantCount">0</span></div>
+    </div>
+  </section>
+
+  <div class="ornament">❦</div>
+
+  <div class="boxes">
+    <div class="box" id="poolBox" data-box="pool">
+      <div class="box-header">
+        <div class="box-title">Ordine di partenza</div>
+        <div class="box-count"><span id="poolCount">0</span> rimaste</div>
+      </div>
+      <div class="letters" id="pool"></div>
+    </div>
+
+    <div class="box" id="workBox" data-box="work">
+      <div class="box-header">
+        <div class="box-title">Composizione</div>
+        <div class="box-count"><span id="workCount">0</span> usate</div>
+      </div>
+      <div class="letters" id="work"></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="ghost" id="shuffleBtn">mescola</button>
+    <button class="ghost" id="returnAllBtn">riporta tutto</button>
+    <button class="ghost" id="clearBtn">azzera tutto</button>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><span class="legend-swatch v"></span>vocali · a e i o u y</div>
+    <div class="legend-item"><span class="legend-swatch c"></span>consonanti</div>
+    <div class="legend-item">tap = sposta · trascina = riordina</div>
+  </div>
+</div>
+
+<script>
+const VOWELS = new Set(['A','E','I','O','U','Y','À','È','É','Ì','Í','Ò','Ó','Ù','Ú']);
+
+const state = {
+  pool: [],
+  work: [],
+};
+
+let nextId = 0;
+
+const $ = (id) => document.getElementById(id);
+const isVowel = (c) => VOWELS.has(c.toUpperCase());
+
+function normalize(input) {
+  return Array.from(input.toUpperCase()).filter(c => /\p{L}/u.test(c));
+}
+
+function addWords(text) {
+  const chars = normalize(text);
+  chars.forEach(c => {
+    state.pool.push({ id: ++nextId, char: c, fresh: true });
+  });
+  render();
+  setTimeout(() => {
+    state.pool.forEach(l => l.fresh = false);
+    state.work.forEach(l => l.fresh = false);
+  }, 300);
+}
+
+function findLetter(letterId) {
+  for (const boxId of ['pool', 'work']) {
+    const idx = state[boxId].findIndex(l => l.id === letterId);
+    if (idx !== -1) return { boxId, idx, letter: state[boxId][idx] };
+  }
+  return null;
+}
+
+function moveLetterToPosition(letterId, targetBoxId, targetIdx) {
+  const found = findLetter(letterId);
+  if (!found) return;
+  const { boxId: fromBox, idx: fromIdx, letter } = found;
+
+  state[fromBox].splice(fromIdx, 1);
+
+  let finalIdx = targetIdx;
+  if (fromBox === targetBoxId && targetIdx > fromIdx) {
+    finalIdx = targetIdx - 1;
+  }
+
+  finalIdx = Math.max(0, Math.min(finalIdx, state[targetBoxId].length));
+  state[targetBoxId].splice(finalIdx, 0, letter);
+
+  letter.fresh = (fromBox !== targetBoxId);
+  render();
+  setTimeout(() => { letter.fresh = false; }, 250);
+}
+
+function moveLetterTap(letterId) {
+  const found = findLetter(letterId);
+  if (!found) return;
+  const target = found.boxId === 'pool' ? 'work' : 'pool';
+  moveLetterToPosition(letterId, target, state[target].length);
+}
+
+function render() {
+  renderBox('pool');
+  renderBox('work');
+  updateStats();
+}
+
+function renderBox(boxId) {
+  const container = $(boxId);
+  container.innerHTML = '';
+  const arr = state[boxId];
+
+  if (arr.length === 0) {
+    const hint = document.createElement('div');
+    hint.className = 'empty-hint';
+    hint.textContent = boxId === 'pool'
+      ? 'inserisci parole per cominciare'
+      : 'tap o trascina qui le lettere';
+    container.appendChild(hint);
+    return;
+  }
+
+  arr.forEach((letter, idx) => {
+    const el = document.createElement('div');
+    el.className = 'letter' + (isVowel(letter.char) ? ' vowel' : '') + (letter.fresh ? ' entering' : '');
+    el.textContent = letter.char;
+    el.dataset.letterId = letter.id;
+    el.dataset.boxId = boxId;
+    el.dataset.index = idx;
+    container.appendChild(el);
+  });
+}
+
+function updateStats() {
+  const all = [...state.pool, ...state.work];
+  const total = all.length;
+  const vowels = all.filter(l => isVowel(l.char)).length;
+  const consonants = total - vowels;
+
+  $('totalCount').textContent = total;
+  $('vowelCount').textContent = vowels;
+  $('consonantCount').textContent = consonants;
+  $('poolCount').textContent = state.pool.length;
+  $('workCount').textContent = state.work.length;
+}
+
+// ============ DRAG SYSTEM con Pointer Events ============
+
+let drag = null;
+const DRAG_THRESHOLD = 5;
+
+function onPointerDown(e) {
+  const letterEl = e.target.closest('.letter');
+  if (!letterEl) return;
+  if (letterEl.classList.contains('dragging')) return;
+
+  const letterId = parseInt(letterEl.dataset.letterId, 10);
+  const rect = letterEl.getBoundingClientRect();
+
+  drag = {
+    letterId,
+    sourceEl: letterEl,
+    startX: e.clientX,
+    startY: e.clientY,
+    offsetX: e.clientX - rect.left,
+    offsetY: e.clientY - rect.top,
+    moved: false,
+    ghost: null,
+    pointerId: e.pointerId,
+    rect,
+  };
+
+  e.preventDefault();
+}
+
+function onPointerMove(e) {
+  if (!drag) return;
+  if (e.pointerId !== drag.pointerId) return;
+
+  const dx = e.clientX - drag.startX;
+  const dy = e.clientY - drag.startY;
+
+  if (!drag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+
+  if (!drag.moved) {
+    drag.moved = true;
+    const ghost = drag.sourceEl.cloneNode(true);
+    ghost.classList.add('dragging');
+    ghost.classList.remove('entering');
+    ghost.style.width = drag.rect.width + 'px';
+    ghost.style.height = drag.rect.height + 'px';
+    document.body.appendChild(ghost);
+    drag.ghost = ghost;
+    drag.sourceEl.classList.add('placeholder');
+  }
+
+  drag.ghost.style.left = (e.clientX - drag.offsetX) + 'px';
+  drag.ghost.style.top = (e.clientY - drag.offsetY) + 'px';
+
+  drag.ghost.style.display = 'none';
+  const elBelow = document.elementFromPoint(e.clientX, e.clientY);
+  drag.ghost.style.display = '';
+
+  showDropIndicator(elBelow, e.clientX, e.clientY);
+}
+
+function showDropIndicator(elBelow, x, y) {
+  document.querySelectorAll('.box.drag-over').forEach(b => b.classList.remove('drag-over'));
+  document.querySelectorAll('.drop-indicator').forEach(i => i.remove());
+
+  if (!elBelow) return;
+  const box = elBelow.closest('.box');
+  if (!box) return;
+
+  box.classList.add('drag-over');
+
+  const lettersContainer = box.querySelector('.letters');
+  const result = computeDropPosition(lettersContainer, x, y);
+
+  const indicator = document.createElement('div');
+  indicator.className = 'drop-indicator';
+
+  if (result.insertBeforeEl) {
+    lettersContainer.insertBefore(indicator, result.insertBeforeEl);
+  } else {
+    const hint = lettersContainer.querySelector('.empty-hint');
+    if (hint) {
+      hint.style.display = 'none';
+    }
+    lettersContainer.appendChild(indicator);
+  }
+}
+
+function computeDropPosition(lettersContainer, x, y) {
+  // ritorna { domIdx, insertBeforeEl } dove domIdx è la posizione tra le lettere visibili
+  // (escludendo placeholder)
+  const letters = Array.from(lettersContainer.querySelectorAll('.letter:not(.placeholder)'));
+
+  for (let i = 0; i < letters.length; i++) {
+    const l = letters[i];
+    const r = l.getBoundingClientRect();
+    const midX = r.left + r.width / 2;
+    if (y < r.top) {
+      return { domIdx: i, insertBeforeEl: l };
+    }
+    if (y >= r.top && y <= r.bottom && x < midX) {
+      return { domIdx: i, insertBeforeEl: l };
+    }
+  }
+  return { domIdx: letters.length, insertBeforeEl: null };
+}
+
+function onPointerUp(e) {
+  if (!drag) return;
+  if (e.pointerId !== drag.pointerId) return;
+
+  if (!drag.moved) {
+    moveLetterTap(drag.letterId);
+    drag = null;
+    return;
+  }
+
+  drag.ghost.style.display = 'none';
+  const elBelow = document.elementFromPoint(e.clientX, e.clientY);
+  drag.ghost.style.display = '';
+
+  const box = elBelow ? elBelow.closest('.box') : null;
+
+  if (box) {
+    const targetBoxId = box.dataset.box;
+    const lettersContainer = box.querySelector('.letters');
+    const { domIdx } = computeDropPosition(lettersContainer, e.clientX, e.clientY);
+
+    // domIdx conta le lettere DOM escludendo la placeholder.
+    // Se la lettera trascinata è nello stesso box, dobbiamo convertire al corrispondente
+    // indice nello stato (che include la lettera trascinata).
+    const found = findLetter(drag.letterId);
+    if (found) {
+      let stateIdx = domIdx;
+      if (found.boxId === targetBoxId) {
+        // se domIdx è >= found.idx, l'indice di stato corrispondente è domIdx + 1
+        // (perché la placeholder occupa found.idx nello stato ma è esclusa dal DOM count)
+        if (domIdx >= found.idx) {
+          stateIdx = domIdx + 1;
+        } else {
+          stateIdx = domIdx;
+        }
+      }
+      moveLetterToPosition(drag.letterId, targetBoxId, stateIdx);
+    }
+  }
+
+  cleanupDrag();
+}
+
+function onPointerCancel(e) {
+  if (!drag) return;
+  cleanupDrag();
+}
+
+function cleanupDrag() {
+  if (drag) {
+    if (drag.ghost) drag.ghost.remove();
+    if (drag.sourceEl) drag.sourceEl.classList.remove('placeholder');
+  }
+  document.querySelectorAll('.box.drag-over').forEach(b => b.classList.remove('drag-over'));
+  document.querySelectorAll('.drop-indicator').forEach(i => i.remove());
+  drag = null;
+}
+
+document.addEventListener('pointerdown', onPointerDown);
+document.addEventListener('pointermove', onPointerMove);
+document.addEventListener('pointerup', onPointerUp);
+document.addEventListener('pointercancel', onPointerCancel);
+
+// pulsanti
+$('addBtn').addEventListener('click', () => {
+  const v = $('wordInput').value.trim();
+  if (!v) return;
+  addWords(v);
+  $('wordInput').value = '';
+  $('wordInput').focus();
+});
+
+$('wordInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $('addBtn').click();
+});
+
+$('shuffleBtn').addEventListener('click', () => {
+  for (let i = state.pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [state.pool[i], state.pool[j]] = [state.pool[j], state.pool[i]];
+  }
+  render();
+});
+
+$('returnAllBtn').addEventListener('click', () => {
+  state.pool.push(...state.work);
+  state.work = [];
+  render();
+});
+
+$('clearBtn').addEventListener('click', () => {
+  state.pool = [];
+  state.work = [];
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
