@@ -438,8 +438,6 @@
   <div class="controls-section">
     <div class="controls-label">archivio</div>
     <div class="controls">
-      <button class="accent" id="saveBtn">salva</button>
-      <button class="ghost" id="loadBtn">carica salvato</button>
       <button class="ghost" id="exportBtn">esporta json</button>
       <button class="ghost" id="importBtn">importa json</button>
       <input type="file" id="fileInput" accept=".json,application/json">
@@ -1003,29 +1001,6 @@ $('clearBtn').addEventListener('click', () => {
   try { localStorage.removeItem(STORAGE_KEY); } catch(_) {}
   render();
   showToast('azzerato');
-});
-
-$('saveBtn').addEventListener('click', () => {
-  saveToStorage();
-  showToast('salvato');
-});
-
-$('loadBtn').addEventListener('click', () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      showToast('nessun salvataggio', true);
-      return;
-    }
-    const data = JSON.parse(raw);
-    deserializeState(data);
-    render();
-    const total = state.pool.length + state.work.length;
-    const when = data.savedAt ? new Date(data.savedAt).toLocaleString('it-IT', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
-    showToast(`caricato · ${total} lettere${when ? ' · ' + when : ''}`);
-  } catch (e) {
-    showToast('errore lettura salvataggio', true);
-  }
 });
 
 $('exportBtn').addEventListener('click', exportJson);
