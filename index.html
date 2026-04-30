@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Anagrammi</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -426,6 +429,7 @@
 
   <div class="controls">
     <button class="ghost" id="spaceBtn">+ spazio</button>
+    <button class="ghost" id="copyBtn">copia composizione</button>
     <button class="ghost" id="shuffleBtn">mescola</button>
     <button class="ghost" id="returnAllBtn">riporta tutto</button>
     <button class="ghost" id="clearBtn">azzera tutto</button>
@@ -446,7 +450,7 @@
     <div class="legend-item"><span class="legend-swatch v"></span>vocali · a e i o u y</div>
     <div class="legend-item"><span class="legend-swatch c"></span>consonanti</div>
     <div class="legend-item"><span class="legend-swatch s"></span>spazio</div>
-    <div class="legend-item">tap = sposta · trascina = riordina · tap su lettera = posiziona caret</div>
+    <div class="legend-item">tap su lettera = sposta tra i box · trascina = riordina · tap su area vuota = sposta caret</div>
   </div>
 </div>
 
@@ -535,8 +539,19 @@ function moveLetterTap(letterId) {
   const found = findLetter(letterId);
   if (!found) return;
   if (found.boxId === 'work') {
-    // tap su una lettera già in work → posiziona caret dopo di essa
-    state.caretIdx = found.idx + 1;
+    // tap su lettera in work → torna al pool (in coda)
+    // se la lettera è uno spazio, viene eliminata invece di tornare al pool
+    if (isSpace(found.letter)) {
+      state.work.splice(found.idx, 1);
+      // aggiusta caret se necessario
+      if (state.caretIdx > found.idx) state.caretIdx--;
+      saveToStorage();
+      render();
+      return;
+    }
+    moveLetterToPosition(letterId, 'pool', state.pool.length);
+    // dopo aver tolto la lettera, aggiusta il caret
+    if (state.caretIdx > found.idx) state.caretIdx--;
     saveToStorage();
     render();
     return;
@@ -765,6 +780,31 @@ document.addEventListener('pointermove', onPointerMove);
 document.addEventListener('pointerup', onPointerUp);
 document.addEventListener('pointercancel', onPointerCancel);
 
+// click sul box work (area vuota) per posizionare il caret
+$('workBox').addEventListener('click', (e) => {
+  // ignora se si è cliccato su una lettera (gestita altrove) o se è in corso un drag
+  if (e.target.closest('.letter')) return;
+  if (drag) return;
+  const lettersContainer = $('work');
+  const letters = Array.from(lettersContainer.querySelectorAll('.letter'));
+  if (letters.length === 0) {
+    state.caretIdx = 0;
+    render();
+    return;
+  }
+  // determina dove va il caret in base alla posizione del click
+  let newCaret = state.work.length;
+  for (let i = 0; i < letters.length; i++) {
+    const r = letters[i].getBoundingClientRect();
+    const midX = r.left + r.width / 2;
+    if (e.clientY < r.top) { newCaret = i; break; }
+    if (e.clientY >= r.top && e.clientY <= r.bottom && e.clientX < midX) { newCaret = i; break; }
+  }
+  state.caretIdx = newCaret;
+  saveToStorage();
+  render();
+});
+
 // ============ STORAGE / IMPORT / EXPORT ============
 
 function serializeState() {
@@ -881,6 +921,33 @@ $('spaceBtn').addEventListener('click', () => {
   addSpaceAtCaret();
 });
 
+$('copyBtn').addEventListener('click', async () => {
+  const text = state.work.map(l => isSpace(l) ? ' ' : l.char).join('');
+  if (!text) {
+    showToast('composizione vuota', true);
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(`copiato · "${text}"`);
+  } catch (err) {
+    // fallback per browser più vecchi o senza permessi
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      showToast(`copiato · "${text}"`);
+    } catch (e2) {
+      showToast('impossibile copiare', true);
+    }
+  }
+});
+
 $('shuffleBtn').addEventListener('click', () => {
   for (let i = state.pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -944,8 +1011,21 @@ $('saveBtn').addEventListener('click', () => {
 });
 
 $('loadBtn').addEventListener('click', () => {
-  if (loadFromStorage()) showToast('caricato');
-  else showToast('nessun salvataggio', true);
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      showToast('nessun salvataggio', true);
+      return;
+    }
+    const data = JSON.parse(raw);
+    deserializeState(data);
+    render();
+    const total = state.pool.length + state.work.length;
+    const when = data.savedAt ? new Date(data.savedAt).toLocaleString('it-IT', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+    showToast(`caricato · ${total} lettere${when ? ' · ' + when : ''}`);
+  } catch (e) {
+    showToast('errore lettura salvataggio', true);
+  }
 });
 
 $('exportBtn').addEventListener('click', exportJson);
